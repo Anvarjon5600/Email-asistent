@@ -13,7 +13,7 @@ class GeminiClient:
         else:
             try:
                 genai.configure(api_key=Config.GEMINI_API_KEY)
-                self.model = genai.GenerativeModel("gemini-1.5-flash")
+                self.model = genai.GenerativeModel("gemini-2.0-flash")
                 logger.info("Gemini AI успешно инициализирован")
             except Exception as e:
                 logger.error(f"Ошибка инициализации Gemini: {e}")
@@ -22,7 +22,7 @@ class GeminiClient:
     def analyze_email_for_reminder(self, email_subject: str, email_body: str) -> str:
         """Анализирует email и создает умное напоминание"""
         if not self.model:
-            return f"📧 {email_subject}\n{email_body[:200]}..."
+            return f"📧 {email_subject}\n{email_body}..."
 
         try:
             prompt = f"""

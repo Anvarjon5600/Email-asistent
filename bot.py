@@ -1,7 +1,7 @@
 import logging
 import html
+import os
 from datetime import datetime
-from typing import Dict, Optional
 from telegram import (
     Update,
     ReplyKeyboardMarkup,
@@ -31,7 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Состояния для ConversationHandler
-LOGIN, PASSWORD, CONFIRMATION = range(3)
+LOGIN, PASSWORD, IMAP_SERVER, IMAP_PORT, CONFIRMATION = range(5)
 
 
 class EmailBot:
@@ -39,6 +39,56 @@ class EmailBot:
         self.application = Application.builder().token(Config.TELEGRAM_TOKEN).build()
         self.setup_handlers()
         self.setup_jobs()
+        self.email_providers = self._init_email_providers()
+
+    def _init_email_providers(self):
+        """Инициализация списка почтовых провайдеров"""
+        return {
+            "gmail.com": {
+                "name": "Gmail",
+                "webmail_url": "https://mail.google.com",
+            },
+            "yandex.ru": {
+                "name": "Яндекс.Почта",
+                "webmail_url": "https://mail.yandex.ru",
+            },
+            "yandex.com": {
+                "name": "Yandex Mail",
+                "webmail_url": "https://mail.yandex.com",
+            },
+            "mail.ru": {
+                "name": "Mail.ru",
+                "webmail_url": "https://e.mail.ru",
+            },
+            "bk.ru": {
+                "name": "Mail.ru (bk)",
+                "webmail_url": "https://e.mail.ru",
+            },
+            "inbox.ru": {
+                "name": "Mail.ru (inbox)",
+                "webmail_url": "https://e.mail.ru",
+            },
+            "outlook.com": {
+                "name": "Outlook",
+                "webmail_url": "https://outlook.live.com",
+            },
+            "hotmail.com": {
+                "name": "Outlook",
+                "webmail_url": "https://outlook.live.com",
+            },
+            "live.com": {
+                "name": "Outlook",
+                "webmail_url": "https://outlook.live.com",
+            },
+            "yahoo.com": {
+                "name": "Yahoo Mail",
+                "webmail_url": "https://mail.yahoo.com",
+            },
+            "icloud.com": {
+                "name": "iCloud Mail",
+                "webmail_url": "https://www.icloud.com/mail",
+            },
+        }
 
     # ==================== МЕНЮ И КНОПКИ ====================
 
@@ -77,30 +127,15 @@ class EmailBot:
             one_time_keyboard=False,
         )
 
-    def get_check_interval_menu(self):
-        """Меню выбора интервала проверки"""
+    def get_autocheck_menu(self):
+        """Меню автопроверки"""
         return ReplyKeyboardMarkup(
             [
-                ["⏱ 10 секунд", "⏱ 30 секунд"],
-                ["⏱ 1 минута", "⏱ 5 минут"],
-                ["⏱ 10 минут", "⏱ 30 минут"],
-                ["⬅️ Назад в настройки"],
+                ["✅ Включить автопроверку", "❌ Выключить автопроверку"],
+                ["⬅️ Назад"],
             ],
             resize_keyboard=True,
-            one_time_keyboard=False,
-        )
-
-    def get_reminders_menu(self):
-        """Меню настроек напоминаний"""
-        return ReplyKeyboardMarkup(
-            [
-                ["🔔 Включить напоминания", "🔕 Выключить напоминания"],
-                ["🕐 За 1 день", "🕑 За 3 дня"],
-                ["🕒 За 7 дней", "🕓 За 14 дней"],
-                ["⬅️ Назад в настройки"],
-            ],
-            resize_keyboard=True,
-            one_time_keyboard=False,
+            one_time_keyboard=True,
         )
 
     def get_confirmation_menu(self):
@@ -111,54 +146,34 @@ class EmailBot:
             one_time_keyboard=True,
         )
 
-    def get_autocheck_menu(self):
-        """Меню автопроверки"""
-        return ReplyKeyboardMarkup(
-            [
-                ["✅ Включить автопроверку", "❌ Выключить автопроверку"],
-                ["🕐 Каждые 10 сек", "🕑 Каждые 30 сек"],
-                ["🕒 Каждые 1 мин", "🕓 Каждые 5 мин"],
-                ["⬅️ Назад"],
-            ],
-            resize_keyboard=True,
-            one_time_keyboard=True,
-        )
-
-    # ==================== ОСНОВНЫЕ КОМАНДЫ ====================
+    # ==================== РЕГИСТРАЦИЯ ====================
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        """Начинает диалог с пользователем"""
+        """Начинает диалог с пользователя"""
         user = update.message.from_user
         context.user_data["user_id"] = user.id
 
-        # Проверяем, есть ли уже данные пользователя
         existing_data = user_manager.get_user_data(user.id)
 
         if existing_data:
-            # Пользователь уже зарегистрирован - показываем главное меню
             await update.message.reply_text(
                 f"👋 Добро пожаловать, {user.first_name}!\n\n"
                 f"✅ Ваш почтовый ящик: {existing_data['login']}\n"
-                f"🔄 Автопроверка: активна (каждые 10 секунд)\n\n"
+                f"🌐 Сервер: {existing_data['imap_server']}:{existing_data['imap_port']}\n\n"
                 f"Выберите действие:",
                 parse_mode="HTML",
                 reply_markup=self.get_main_menu(user.id),
             )
             return ConversationHandler.END
         else:
-            # Пользователь не зарегистрирован - начинаем регистрацию
             await update.message.reply_text(
                 f"👋 Привет, {user.first_name}!\n\n"
-                "🤖 Я - умный почтовый ассистент с искусственным интеллектом!\n\n"
+                "🤖 Я - умный почтовый ассистент!\n\n"
                 "📧 <b>Что я умею:</b>\n"
-                "• Автоматически проверять вашу почту\n"
+                "• Проверять вашу почту\n"
                 "• Анализировать письма с помощью AI\n"
-                "• Создавать умные напоминания\n"
-                "• Находить даты и события в письмах\n"
-                "• Отправлять уведомления о новых письмах\n\n"
-                "🔐 <b>Безопасность:</b>\n"
-                "Ваши данные шифруются и хранятся безопасно.\n\n"
-                "📝 <b>Для начала работы введите ваш email логин:</b>",
+                "• Отправлять уведомления\n\n"
+                "📝 <b>Для начала введите ваш email:</b>",
                 parse_mode="HTML",
                 reply_markup=ReplyKeyboardRemove(),
             )
@@ -167,41 +182,153 @@ class EmailBot:
     async def get_login(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> int:
-        """Получает логин от пользователя"""
+        """Получает логин"""
         login = update.message.text.strip()
 
-        # Простая валидация email
         if "@" not in login:
             await update.message.reply_text(
-                "❌ Это не похоже на email адрес. Пожалуйста, введи корректный email:"
+                "❌ Это не похоже на email. Введите корректный email:"
             )
             return LOGIN
 
         context.user_data["login"] = login
 
+        domain = login.split("@")[1].lower()
+        popular_servers = self._get_popular_servers_for_domain(domain)
+
+        message = f"✅ Логин <b>{login}</b> сохранен.\n\n"
+
+        if popular_servers:
+            message += f"📡 <b>Рекомендуемые настройки:</b>\n"
+            for server in popular_servers:
+                message += f"• {server['name']}: {server['imap_server']}:{server['imap_port']}\n"
+            message += "\n"
+
+        message += "🌐 <b>Введите IMAP сервер вашей почты:</b>\n"
+        message += "Пример: imap.gmail.com, imap.yandex.ru"
+
         await update.message.reply_text(
-            f"✅ Логин <b>{login}</b> сохранен.\n\n"
-            "🔑 Теперь введите пароль от вашей почты:",
+            message,
             parse_mode="HTML",
             reply_markup=ReplyKeyboardRemove(),
         )
-        return PASSWORD
+        return IMAP_SERVER
+
+    def _get_popular_servers_for_domain(self, domain: str):
+        """Возвращает популярные серверы для домена"""
+        servers = []
+
+        if "gmail.com" in domain or "google.com" in domain:
+            servers.append(
+                {"name": "Gmail", "imap_server": "imap.gmail.com", "imap_port": 993}
+            )
+
+        elif "yandex" in domain:
+            servers.append(
+                {"name": "Яндекс", "imap_server": "imap.yandex.ru", "imap_port": 993}
+            )
+
+        elif any(x in domain for x in ["mail.ru", "bk.ru", "inbox.ru"]):
+            servers.append(
+                {"name": "Mail.ru", "imap_server": "imap.mail.ru", "imap_port": 993}
+            )
+
+        elif any(x in domain for x in ["outlook.com", "hotmail.com", "live.com"]):
+            servers.append(
+                {
+                    "name": "Outlook",
+                    "imap_server": "outlook.office365.com",
+                    "imap_port": 993,
+                }
+            )
+
+        return servers
+
+    async def get_imap_server(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> int:
+        """Получает IMAP сервер"""
+        imap_server = update.message.text.strip()
+
+        if not imap_server or len(imap_server) < 5:
+            await update.message.reply_text(
+                "❌ Некорректный сервер. Введите правильный IMAP сервер:"
+            )
+            return IMAP_SERVER
+
+        context.user_data["imap_server"] = imap_server
+
+        await update.message.reply_text(
+            f"✅ Сервер <b>{imap_server}</b> сохранен.\n\n"
+            f"🔢 <b>Введите порт IMAP:</b>\n"
+            f"Обычно 993 (SSL) или 143 (STARTTLS)\n\n"
+            f"<i>Выберите вариант:</i>",
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardMarkup(
+                [["993 (SSL)", "143 (STARTTLS)"], ["Другой порт"]],
+                resize_keyboard=True,
+                one_time_keyboard=True,
+            ),
+        )
+        return IMAP_PORT
+
+    async def get_imap_port(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> int:
+        """Получает IMAP порт"""
+        port_text = update.message.text.strip()
+
+        if port_text == "Другой порт":
+            await update.message.reply_text(
+                "🔢 Введите номер порта вручную:",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            return IMAP_PORT
+
+        try:
+            if port_text.startswith("993") or port_text == "993 (SSL)":
+                port = 993
+            elif port_text.startswith("143") or port_text == "143 (STARTTLS)":
+                port = 143
+            else:
+                port = int(port_text.split()[0])
+
+                if port < 1 or port > 65535:
+                    raise ValueError("Некорректный порт")
+
+            context.user_data["imap_port"] = port
+
+            await update.message.reply_text(
+                f"✅ Порт <b>{port}</b> сохранен.\n\n"
+                f"🔑 Теперь введите пароль от почты:",
+                parse_mode="HTML",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            return PASSWORD
+
+        except (ValueError, IndexError):
+            await update.message.reply_text(
+                "❌ Некорректный порт. Введите число от 1 до 65535:",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            return IMAP_PORT
 
     async def get_password(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> int:
-        """Получает пароль от пользователя"""
+        """Получает пароль"""
         password = update.message.text
         context.user_data["password"] = password
 
-        # Показываем частично скрытый пароль для подтверждения
         hidden_password = (
             password[:2] + "*" * (len(password) - 2) if len(password) > 2 else "**"
         )
 
         await update.message.reply_text(
-            f"📋 <b>Проверьте введенные данные:</b>\n\n"
+            f"📋 <b>Проверьте данные:</b>\n\n"
             f"📧 <b>Email:</b> {context.user_data['login']}\n"
+            f"🌐 <b>IMAP сервер:</b> {context.user_data['imap_server']}\n"
+            f"🔢 <b>IMAP порт:</b> {context.user_data['imap_port']}\n"
             f"🔑 <b>Пароль:</b> {hidden_password}\n\n"
             f"✅ <b>Все верно?</b>",
             parse_mode="HTML",
@@ -212,55 +339,53 @@ class EmailBot:
     async def confirmation(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> int:
-        """Обрабатывает подтверждение от пользователя"""
+        """Обрабатывает подтверждение"""
         choice = update.message.text
         user_id = context.user_data.get("user_id")
 
         if choice == "✅ Да, сохранить":
             login = context.user_data["login"]
             password = context.user_data["password"]
+            imap_server = context.user_data["imap_server"]
+            imap_port = context.user_data["imap_port"]
 
             await update.message.reply_text(
                 "🔐 Подключаюсь к почтовому серверу...",
                 reply_markup=ReplyKeyboardRemove(),
             )
 
-            # Пробуем подключиться к почте
-            email_client = EmailClient(
-                login, password, Config.IMAP_SERVER, Config.IMAP_PORT
-            )
+            email_client = EmailClient(login, password, imap_server, imap_port)
             if email_client.connect():
                 email_client.disconnect()
 
-                # Сохраняем данные пользователя
-                if user_manager.add_user(user_id, login, password):
+                if user_manager.add_user(
+                    user_id=user_id,
+                    login=login,
+                    password=password,
+                    imap_server=imap_server,
+                    imap_port=imap_port,
+                ):
                     await update.message.reply_text(
-                        f"🎉 <b>Поздравляю! Настройка завершена!</b>\n\n"
+                        f"🎉 <b>Настройка завершена!</b>\n\n"
                         f"✅ <b>Почта:</b> {login}\n"
-                        f"🔄 <b>Автопроверка:</b> каждые 10 секунд\n"
-                        f"📅 <b>Календарь:</b> автоматическое извлечение дат\n"
-                        f"🤖 <b>AI анализ:</b> включен\n\n"
-                        f"🚀 <b>Теперь вы можете:</b>\n"
-                        f"• Проверить почту вручную\n"
-                        f"• Просмотреть найденные события\n"
-                        f"• Настроить интервал проверки\n"
-                        f"• Управлять напоминаниями\n\n"
+                        f"🌐 <b>Сервер:</b> {imap_server}:{imap_port}\n"
+                        f"🔄 <b>Автопроверка:</b> каждые 10 секунд\n\n"
                         f"<b>Выберите действие:</b>",
                         parse_mode="HTML",
                         reply_markup=self.get_main_menu(user_id),
                     )
                 else:
                     await update.message.reply_text(
-                        "❌ Ошибка сохранения данных. Попробуйте снова.",
+                        "❌ Ошибка сохранения данных.",
                         reply_markup=self.get_main_menu(user_id),
                     )
             else:
                 await update.message.reply_text(
-                    "❌ Не удалось подключиться к почтовому серверу.\n\n"
+                    "❌ Не удалось подключиться.\n\n"
                     "Возможные причины:\n"
-                    "• Неправильный логин или пароль\n"
-                    "• IMAP не включен в настройках почты\n"
-                    "• Требуется пароль приложения (если включена 2FA)\n\n"
+                    "• Неправильный логин/пароль\n"
+                    "• Неправильный сервер/порт\n"
+                    "• IMAP не включен\n\n"
                     "Попробуйте снова /start",
                     reply_markup=self.get_main_menu(user_id),
                 )
@@ -269,7 +394,7 @@ class EmailBot:
 
         elif choice == "🔄 Ввести заново":
             await update.message.reply_text(
-                "Введите ваш email логин:", reply_markup=ReplyKeyboardRemove()
+                "Введите ваш email:", reply_markup=ReplyKeyboardRemove()
             )
             return LOGIN
 
@@ -285,6 +410,275 @@ class EmailBot:
                 reply_markup=self.get_confirmation_menu(),
             )
             return CONFIRMATION
+
+    # ==================== ОСНОВНЫЕ ФУНКЦИИ ====================
+
+    async def check_email(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Проверяет почту и показывает новые письма"""
+        user_id = update.message.from_user.id
+
+        user_data = user_manager.get_user_data(user_id)
+        if not user_data:
+            await update.message.reply_text(
+                "❌ У вас нет сохраненных данных.\n"
+                "Используйте кнопку '📝 Начать настройку'",
+                reply_markup=self.get_main_menu(user_id),
+            )
+            return
+
+        await update.message.reply_text(
+            "📨 Проверяю почту...", reply_markup=ReplyKeyboardRemove()
+        )
+
+        await self._check_user_emails(
+            user_id, update.message.reply_text, notify_no_emails=True
+        )
+
+        await update.message.reply_text(
+            "Выберите следующее действие:", reply_markup=self.get_main_menu(user_id)
+        )
+
+    def _create_email_buttons(self, user_data):
+        """Создает кнопку для открытия почтового ящика"""
+        webmail_url = user_data.get("webmail_url", "")
+
+        if webmail_url:
+            button = InlineKeyboardButton(
+                text="📬 Открыть почтовый ящик", url=webmail_url
+            )
+            return InlineKeyboardMarkup([[button]])
+
+        return None
+
+    async def _check_user_emails(
+        self, user_id: int, reply_function, notify_no_emails=False
+    ):
+        """Внутренний метод для проверки почты пользователя"""
+        user_data = user_manager.get_user_data(user_id)
+
+        if not user_data:
+            await reply_function(
+                "❌ У тебя нет сохраненных данных. Используй /start чтобы настроить бота"
+            )
+            return False
+
+        try:
+            email_client = EmailClient(
+                user_data["login"],
+                user_data["password"],
+                user_data["imap_server"],
+                user_data["imap_port"],
+            )
+
+            emails = email_client.get_unread_emails(limit=5)
+
+            if not emails:
+                if notify_no_emails:
+                    await reply_function("📭 Новых писем нет")
+                email_client.disconnect()
+                return True
+
+            # Создаем кнопку для почтового ящика
+            reply_markup = self._create_email_buttons(user_data)
+
+            for email_data in emails:
+                try:
+                    analysis = gemini_client.analyze_email_for_reminder(
+                        email_data["subject"], email_data["body"]
+                    )
+
+                    extracted_data = gemini_client.extract_dates_and_links(
+                        email_data["subject"], email_data["body"]
+                    )
+
+                    events_added = event_manager.add_event_from_email(
+                        user_id, email_data["subject"], email_data["body"]
+                    )
+
+                    email_from = html.escape(email_data["from"])
+                    email_subject = html.escape(email_data["subject"])
+                    email_date = html.escape(str(email_data["date"]))
+                    analysis_escaped = html.escape(analysis)
+
+                    message = (
+                        f"📧 <b>От:</b> {email_from}\n"
+                        f"📬 <b>Тема:</b> {email_subject}\n"
+                        f"🕒 <b>Дата письма:</b> {email_date}\n"
+                        f"🔍 <b>Анализ:</b>\n{analysis_escaped}\n"
+                    )
+
+                    if email_data.get("has_attachments") and email_data.get(
+                        "attachments"
+                    ):
+                        attachments = email_data["attachments"]
+                        message += f"\n📎 <b>Вложения ({len(attachments)}):</b>\n"
+                        for i, att in enumerate(attachments[:3], 1):
+                            size_kb = att["size"] / 1024
+                            message += f"• {att['filename']} ({size_kb:.1f} KB)\n"
+
+                        if len(attachments) > 3:
+                            message += f"• ... и еще {len(attachments) - 3}\n"
+
+                    if events_added:
+                        events_text = "\n".join(
+                            [f"📅 {e['title']} - {e['date']}" for e in events_added]
+                        )
+                        message += f"\n🎯 <b>Найдены события:</b>\n{events_text}\n"
+
+                    if extracted_data.get("links"):
+                        links_text = "\n".join(
+                            [f"🔗 {link}" for link in extracted_data["links"][:3]]
+                        )
+                        message += f"\n🔗 <b>Важные ссылки:</b>\n{links_text}\n"
+
+                    await reply_function(
+                        message, parse_mode="HTML", reply_markup=reply_markup
+                    )
+
+                except Exception as e:
+                    logger.error(f"Ошибка при обработке письма: {e}")
+                    await reply_function(
+                        f"❌ Ошибка при обработке письма: {email_data.get('subject', 'Без темы')}",
+                        reply_markup=reply_markup,
+                    )
+
+            email_client.disconnect()
+            return True
+
+        except Exception as e:
+            logger.error(f"Ошибка при проверке почты пользователя {user_id}: {e}")
+            if notify_no_emails:
+                await reply_function("❌ Ошибка при проверке почты")
+            return False
+
+    async def show_events(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показывает события пользователя"""
+        user_id = update.message.from_user.id
+        events = event_manager.get_upcoming_events(user_id, days=30)
+
+        if not events:
+            await update.message.reply_text(
+                "📅 У тебя пока нет предстоящих событий.",
+                reply_markup=self.get_main_menu(user_id),
+            )
+            return
+
+        message = "📅 <b>Твои предстоящие события:</b>\n\n"
+        for event in events:
+            try:
+                event_date_str = event.get("date", event.get("original_date", ""))
+                if not event_date_str:
+                    continue
+
+                event_date = None
+                for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+                    try:
+                        event_date = datetime.strptime(event_date_str, fmt)
+                        break
+                    except ValueError:
+                        continue
+
+                if not event_date:
+                    continue
+
+                event_date_formatted = event_date.strftime("%d.%m.%Y")
+                days_left = (event_date.date() - datetime.now().date()).days
+
+                if days_left == 0:
+                    days_text = "⏰ <b>СЕГОДНЯ!</b>"
+                elif days_left == 1:
+                    days_text = "🚨 <b>Завтра!</b>"
+                elif days_left < 0:
+                    days_text = f"❌ Просрочено ({abs(days_left)} дн. назад)"
+                else:
+                    days_text = f"⏳ Через {days_left} дн."
+
+                message += f"<b>{event_date_formatted}</b> - {event['title'][:50]}\n"
+                message += f"   {days_text}\n\n"
+
+            except Exception as e:
+                logger.error(f"Ошибка при отображении события: {e}")
+                continue
+
+        await update.message.reply_text(
+            message, parse_mode="HTML", reply_markup=self.get_main_menu(user_id)
+        )
+
+    async def show_statistics(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показывает статистику пользователя"""
+        user_id = update.message.from_user.id
+        user_data = user_manager.get_user_data(user_id)
+
+        if not user_data:
+            await update.message.reply_text(
+                "❌ У вас нет сохраненных данных.",
+                reply_markup=self.get_main_menu(user_id),
+            )
+            return
+
+        events_count = len(event_manager.get_user_events(user_id))
+        upcoming_events = len(event_manager.get_upcoming_events(user_id, days=7))
+
+        await update.message.reply_text(
+            f"📊 <b>Ваша статистика:</b>\n\n"
+            f"📧 <b>Почта:</b> {user_data['login']}\n"
+            f"🌐 <b>Сервер:</b> {user_data['imap_server']}:{user_data['imap_port']}\n"
+            f"📅 <b>Всего событий:</b> {events_count}\n"
+            f"🎯 <b>Предстоящие (7 дней):</b> {upcoming_events}\n"
+            f"🔄 <b>Автопроверка:</b> каждые 10 секунд\n",
+            parse_mode="HTML",
+            reply_markup=self.get_main_menu(user_id),
+        )
+
+    async def show_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показывает справку"""
+        help_text = (
+            "🆘 <b>Справка по боту:</b>\n\n"
+            "📋 <b>Основные функции:</b>\n"
+            "• 📧 <b>Проверить почту</b> - ручная проверка новых писем\n"
+            "• 🔄 <b>Автопроверка</b> - настройка автоматической проверки\n"
+            "• 📅 <b>Мои события</b> - просмотр найденных событий\n"
+            "• ⚙️ <b>Настройки</b> - настройка бота\n"
+            "• 📊 <b>Статистика</b> - ваша статистика\n\n"
+            "🔐 <b>Безопасность:</b>\n"
+            "• Ваши данные шифруются\n"
+            "• Пароли хранятся безопасно\n\n"
+            "🤖 <b>AI функции:</b>\n"
+            "• Автоматический анализ писем\n"
+            "• Извлечение дат и событий\n"
+            "• Определение срочности\n"
+            "• Поиск важных ссылок"
+        )
+
+        await update.message.reply_text(
+            help_text,
+            parse_mode="HTML",
+            reply_markup=self.get_main_menu(update.message.from_user.id),
+        )
+
+    async def show_about(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показывает информацию о боте"""
+        about_text = (
+            "ℹ️ <b>О боте:</b>\n\n"
+            "🤖 <b>Умный почтовый ассистент</b>\n"
+            "Версия: 2.0\n\n"
+            "🚀 <b>Возможности:</b>\n"
+            "• Проверка почты\n"
+            "• AI анализ через Gemini\n"
+            "• Автоматический календарь\n"
+            "• Безопасное хранение\n\n"
+            "🔧 <b>Технологии:</b>\n"
+            "• Python 3\n"
+            "• Telegram Bot API\n"
+            "• Google Gemini AI\n"
+            "• Шифрование"
+        )
+
+        await update.message.reply_text(
+            about_text,
+            parse_mode="HTML",
+            reply_markup=self.get_main_menu(update.message.from_user.id),
+        )
 
     # ==================== ОБРАБОТЧИКИ КНОПОК МЕНЮ ====================
 
@@ -310,13 +704,13 @@ class EmailBot:
 
         elif text == "✅ Включить автопроверку":
             await update.message.reply_text(
-                "✅ Автопроверка включена! Буду проверять почту автоматически.",
+                "✅ Автопроверка включена!",
                 reply_markup=self.get_main_menu(user_id),
             )
 
         elif text == "❌ Выключить автопроверку":
             await update.message.reply_text(
-                "❌ Автопроверка выключена. Используйте ручную проверку.",
+                "❌ Автопроверка выключена.",
                 reply_markup=self.get_main_menu(user_id),
             )
 
@@ -332,26 +726,11 @@ class EmailBot:
 
         elif text == "✏️ Изменить данные":
             await update.message.reply_text(
-                "Для изменения данных почты введите новый email логин:",
+                "Для изменения данных введите новый email:",
                 reply_markup=ReplyKeyboardRemove(),
             )
             context.user_data["changing_data"] = True
             return LOGIN
-
-        elif text == "⏰ Интервал проверки":
-            await update.message.reply_text(
-                "⏰ <b>Выберите интервал автоматической проверки:</b>",
-                parse_mode="HTML",
-                reply_markup=self.get_check_interval_menu(),
-            )
-
-        elif text == "🔔 Напоминания":
-            await update.message.reply_text(
-                "🔔 <b>Настройка напоминаний:</b>\n\n"
-                "Выберите когда напоминать о событиях:",
-                parse_mode="HTML",
-                reply_markup=self.get_reminders_menu(),
-            )
 
         elif text == "📊 Статистика":
             await self.show_statistics(update, context)
@@ -367,322 +746,10 @@ class EmailBot:
                 "Главное меню:", reply_markup=self.get_main_menu(user_id)
             )
 
-        elif text == "⬅️ Назад в настройки":
-            await update.message.reply_text(
-                "⚙️ Настройки бота:",
-                parse_mode="HTML",
-                reply_markup=self.get_settings_menu(),
-            )
-
         elif text == "⬅️ Назад":
             await update.message.reply_text(
                 "Главное меню:", reply_markup=self.get_main_menu(user_id)
             )
-
-        # Обработка интервалов проверки
-        elif text in [
-            "⏱ 10 секунд",
-            "⏱ 30 секунд",
-            "⏱ 1 минута",
-            "⏱ 5 минут",
-            "⏱ 10 минут",
-            "⏱ 30 минут",
-        ]:
-            interval_text = text.split(" ")[1]
-            await update.message.reply_text(
-                f"✅ Интервал проверки установлен: {interval_text}",
-                reply_markup=self.get_settings_menu(),
-            )
-
-        # Обработка напоминаний
-        elif text in ["🔔 Включить напоминания", "🔕 Выключить напоминания"]:
-            status = "включены" if "Включить" in text else "выключены"
-            await update.message.reply_text(
-                f"✅ Напоминания {status}", reply_markup=self.get_reminders_menu()
-            )
-
-        elif text in ["🕐 За 1 день", "🕑 За 3 дня", "🕒 За 7 дней", "🕓 За 14 дней"]:
-            days = text.split(" ")[1]
-            await update.message.reply_text(
-                f"✅ Напоминания будут отправляться за {days} дня до события",
-                reply_markup=self.get_reminders_menu(),
-            )
-
-    # ==================== ОСНОВНЫЕ ФУНКЦИИ ====================
-
-    async def check_email(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Проверяет почту и показывает новые письма"""
-        user_id = update.message.from_user.id
-
-        user_data = user_manager.get_user_data(user_id)
-        if not user_data:
-            await update.message.reply_text(
-                "❌ У вас нет сохраненных данных.\n"
-                "Используйте кнопку '📝 Начать настройку'",
-                reply_markup=self.get_main_menu(user_id),
-            )
-            return
-
-        await update.message.reply_text(
-            "📨 Проверяю почту...", reply_markup=ReplyKeyboardRemove()
-        )
-
-        await self._check_user_emails(
-            user_id, update.message.reply_text, notify_no_emails=True
-        )
-
-        # Возвращаем меню
-        await update.message.reply_text(
-            "Выберите следующее действие:", reply_markup=self.get_main_menu(user_id)
-        )
-
-    async def _check_user_emails(
-        self, user_id: int, reply_function, notify_no_emails=False
-    ):
-        """Внутренний метод для проверки почты пользователя"""
-        user_data = user_manager.get_user_data(user_id)
-
-        if not user_data:
-            await reply_function(
-                "❌ У тебя нет сохраненных данных. Используй /start чтобы настроить бота"
-            )
-            return False
-
-        try:
-            email_client = EmailClient(
-                user_data["login"],
-                user_data["password"],
-                Config.IMAP_SERVER,
-                Config.IMAP_PORT,
-            )
-
-            emails = email_client.get_unread_emails(limit=5)
-
-            if not emails:
-                if notify_no_emails:
-                    await reply_function("📭 Новых писем нет")
-                email_client.disconnect()
-                return True
-
-            # Кэш для хранения полных текстов писем (в памяти на время сессии)
-            if not hasattr(self, 'email_cache'):
-                self.email_cache = {}
-        
-            for email_data in emails:
-                try:
-                    # Сохраняем в кэш
-                    self.email_cache[email_data['id']] = email_data
-                
-                    # Анализируем письмо с помощью Gemini
-                    analysis = gemini_client.analyze_email_for_reminder(
-                        email_data["subject"], email_data["body"]
-                    )
-
-                    extracted_data = gemini_client.extract_dates_and_links(
-                        email_data["subject"], email_data["body"]
-                    )
-
-                    events_added = event_manager.add_event_from_email(
-                        user_id, email_data["subject"], email_data["body"]
-                    )
-
-                    # Экранируем специальные символы
-                    email_from = html.escape(email_data["from"])
-                    email_subject = html.escape(email_data["subject"])
-                    email_date = html.escape(str(email_data["date"]))
-                    analysis_escaped = html.escape(analysis)
-
-                    # Формируем сообщение
-                    message = (
-                        f"📧 <b>От:</b> {email_from}\n"
-                        f"📬 <b>Тема:</b> {email_subject}\n"
-                        f"🕒 <b>Дата письма:</b> {email_date}\n"
-                        f"🔍 <b>Анализ:</b>\n{analysis_escaped}\n"
-                    )
-
-                    if events_added:
-                        events_text = "\n".join(
-                            [f"📅 {e['title']} - {e['date']}" for e in events_added]
-                        )
-                        message += f"\n🎯 <b>Найдены события:</b>\n{events_text}\n"
-
-                    if extracted_data.get("links"):
-                        links_text = "\n".join(
-                            [f"🔗 {link}" for link in extracted_data["links"][:3]]
-                        )
-                        message += f"\n🔗 <b>Важные ссылки:</b>\n{links_text}\n"
-
-                    # Получаем кнопки для письма
-                    reply_markup = self._get_email_buttons(email_data, user_data)
-
-                    await reply_function(
-                        message, 
-                        parse_mode="HTML",
-                        reply_markup=reply_markup
-                    )
-
-                except Exception as e:
-                    logger.error(f"Ошибка при обработке письма: {e}")
-                    await reply_function(
-                        f"❌ Ошибка при обработке письма: {email_data.get('subject', 'Без темы')}"
-                    )
-
-            email_client.disconnect()
-            return True
-
-        except Exception as e:
-            logger.error(f"Ошибка при проверке почты пользователя {user_id}: {e}")
-            if notify_no_emails:
-                await reply_function("❌ Ошибка при проверке почты")
-            return False
-
-    async def show_events(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Показывает события пользователя"""
-        user_id = update.message.from_user.id
-        events = event_manager.get_upcoming_events(user_id, days=30)
-
-        if not events:
-            await update.message.reply_text(
-                "📅 У тебя пока нет предстоящих событий на ближайшие 30 дней.",
-                reply_markup=self.get_main_menu(user_id),
-            )
-            return
-
-        message = "📅 <b>Твои предстоящие события:</b>\n\n"
-        for event in events:
-            try:
-                event_date_str = event.get("date", event.get("original_date", ""))
-                if not event_date_str:
-                    continue
-
-                # Пробуем разные форматы дат
-                event_date = None
-                for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
-                    try:
-                        event_date = datetime.strptime(event_date_str, fmt)
-                        break
-                    except ValueError:
-                        continue
-
-                if not event_date:
-                    continue
-
-                event_date_formatted = event_date.strftime("%d.%m.%Y")
-                days_left = (event_date.date() - datetime.now().date()).days
-                reminder_status = "🔔" if event.get("reminder_sent") else "🔕"
-
-                if days_left == 0:
-                    days_text = "⏰ <b>СЕГОДНЯ!</b>"
-                elif days_left == 1:
-                    days_text = "🚨 <b>Завтра!</b>"
-                elif days_left < 0:
-                    days_text = f"❌ Просрочено ({abs(days_left)} дн. назад)"
-                else:
-                    days_text = f"⏳ Через {days_left} дн."
-
-                message += f"{reminder_status} <b>{event_date_formatted}</b> - {event['title'][:50]}\n"
-                message += f"   {days_text}\n\n"
-
-            except Exception as e:
-                logger.error(f"Ошибка при отображении события: {e}")
-                continue
-
-        await update.message.reply_text(
-            message, parse_mode="HTML", reply_markup=self.get_main_menu(user_id)
-        )
-
-    async def show_statistics(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Показывает статистику пользователя"""
-        user_id = update.message.from_user.id
-        user_data = user_manager.get_user_data(user_id)
-
-        if not user_data:
-            await update.message.reply_text(
-                "❌ У вас нет сохраненных данных.",
-                reply_markup=self.get_main_menu(user_id),
-            )
-            return
-
-        events_count = len(event_manager.get_user_events(user_id))
-        upcoming_events = len(event_manager.get_upcoming_events(user_id, days=7))
-        total_users = len(user_manager.users)
-
-        await update.message.reply_text(
-            f"📊 <b>Ваша статистика:</b>\n\n"
-            f"📧 <b>Почта:</b> {user_data['login']}\n"
-            f"📅 <b>Всего событий:</b> {events_count}\n"
-            f"🎯 <b>Предстоящие (7 дней):</b> {upcoming_events}\n"
-            f"🔄 <b>Автопроверка:</b> каждые 10 секунд\n"
-            f"🤖 <b>AI анализ:</b> включен\n"
-            f"👥 <b>Всего пользователей бота:</b> {total_users}\n\n"
-            f"<i>Статистика обновляется автоматически</i>",
-            parse_mode="HTML",
-            reply_markup=self.get_main_menu(user_id),
-        )
-
-    async def show_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Показывает справку"""
-        help_text = (
-            "🆘 <b>Справка по боту:</b>\n\n"
-            "📋 <b>Основные функции:</b>\n"
-            "• 📧 <b>Проверить почту</b> - ручная проверка новых писем\n"
-            "• 🔄 <b>Автопроверка</b> - настройка автоматической проверки\n"
-            "• 📅 <b>Мои события</b> - просмотр найденных событий\n"
-            "• ⚙️ <b>Настройки</b> - настройка бота\n"
-            "• 📊 <b>Статистика</b> - ваша статистика\n\n"
-            "⚙️ <b>Настройки:</b>\n"
-            "• ✏️ <b>Изменить данные</b> - изменить логин/пароль\n"
-            "• ⏰ <b>Интервал проверки</b> - настроить частоту проверки\n"
-            "• 🔔 <b>Напоминания</b> - управление уведомлениями\n\n"
-            "🔐 <b>Безопасность:</b>\n"
-            "• Ваши данные шифруются и хранятся безопасно\n"
-            "• Пароли никогда не передаются в открытом виде\n\n"
-            "🤖 <b>AI функции:</b>\n"
-            "• Автоматический анализ писем\n"
-            "• Извлечение дат и событий\n"
-            "• Определение срочности\n"
-            "• Поиск важных ссылок\n\n"
-            "📞 <b>Поддержка:</b>\n"
-            "Для связи с разработчиком используйте команду /feedback"
-        )
-
-        await update.message.reply_text(
-            help_text,
-            parse_mode="HTML",
-            reply_markup=self.get_main_menu(update.message.from_user.id),
-        )
-
-    async def show_about(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Показывает информацию о боте"""
-        about_text = (
-            "ℹ️ <b>О боте:</b>\n\n"
-            "🤖 <b>Умный почтовый ассистент</b>\n"
-            "Версия: 2.0\n"
-            "Разработчик: Anvarjon\n\n"
-            "🚀 <b>Возможности:</b>\n"
-            "• Интеграция с iRedMail\n"
-            "• AI анализ через Gemini\n"
-            "• Автоматический календарь\n"
-            "• Умные напоминания\n"
-            "• Безопасное хранение\n\n"
-            "🔧 <b>Технологии:</b>\n"
-            "• Python 3.13\n"
-            "• Telegram Bot API\n"
-            "• Google Gemini AI\n"
-            "• Шифрование AES-256\n\n"
-            "⭐ <b>Особенности:</b>\n"
-            "• Поддержка нескольких пользователей\n"
-            "• Настраиваемые интервалы\n"
-            "• Удобное меню\n"
-            "• Подробная статистика\n"
-            "• Регулярные обновления"
-        )
-
-        await update.message.reply_text(
-            about_text,
-            parse_mode="HTML",
-            reply_markup=self.get_main_menu(update.message.from_user.id),
-        )
 
     # ==================== ФОНОВЫЕ ЗАДАЧИ ====================
 
@@ -695,13 +762,12 @@ class EmailBot:
             try:
                 user_data = user_manager.get_user_data(user_id)
                 if user_data:
-                    # notify_no_emails=False - не отправляем сообщение если писем нет
                     await self._check_user_emails(
                         user_id,
                         lambda message, **kwargs: context.bot.send_message(
                             chat_id=user_id, text=message, **kwargs
                         ),
-                        notify_no_emails=False,  # Не уведомляем об отсутствии писем
+                        notify_no_emails=False,
                     )
             except Exception as e:
                 logger.error(f"Ошибка автопроверки для пользователя {user_id}: {e}")
@@ -717,7 +783,6 @@ class EmailBot:
                 if not event_date_str:
                     continue
 
-                # Пробуем разные форматы дат
                 event_date = None
                 for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
                     try:
@@ -744,7 +809,7 @@ class EmailBot:
                         f"Событие: {event['title']}\n"
                         f"Дата: {event_date_formatted}\n"
                         f"Осталось: {days_until} дней\n\n"
-                        f"У тебя есть время подготовиться! 🎯"
+                        f"У тебя есть время подготовиться!"
                     )
 
                 await context.bot.send_message(
@@ -758,10 +823,9 @@ class EmailBot:
     # ==================== СЛУЖЕБНЫЕ КОМАНДЫ ====================
 
     async def delete_data(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Удаляет данные пользователя (через команду)"""
+        """Удаляет данные пользователя"""
         user_id = update.message.from_user.id
 
-        # Создаем меню подтверждения удаления
         confirm_keyboard = ReplyKeyboardMarkup(
             [["✅ Да, удалить все данные"], ["❌ Нет, отмена"]],
             resize_keyboard=True,
@@ -780,7 +844,6 @@ class EmailBot:
             reply_markup=confirm_keyboard,
         )
 
-        # Ждем подтверждения
         context.user_data["awaiting_delete_confirmation"] = True
 
     async def handle_delete_confirmation(
@@ -792,7 +855,6 @@ class EmailBot:
 
         if choice == "✅ Да, удалить все данные":
             if user_manager.delete_user(user_id):
-                # Также удаляем события пользователя
                 if user_id in event_manager.events:
                     del event_manager.events[user_id]
                     event_manager.save_events()
@@ -813,7 +875,6 @@ class EmailBot:
                 "Удаление отменено.", reply_markup=self.get_main_menu(user_id)
             )
 
-        # Очищаем флаг
         if "awaiting_delete_confirmation" in context.user_data:
             del context.user_data["awaiting_delete_confirmation"]
 
@@ -826,52 +887,6 @@ class EmailBot:
         return ConversationHandler.END
 
     # ==================== НАСТРОЙКА ОБРАБОТЧИКОВ ====================
-    async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик нажатий на инлайн-кнопки"""
-        query = update.callback_query
-        await query.answer()
-    
-        user_id = query.from_user.id
-        data = query.data
-    
-        if data.startswith("fulltext_"):
-            email_id = data.replace("fulltext_", "")
-        
-            # Ищем письмо в кэше
-            if hasattr(self, 'email_cache') and email_id in self.email_cache:
-                email_data = self.email_cache[email_id]
-            
-                # Формируем сообщение с полным текстом
-                full_text = email_data.get('full_body', email_data.get('body', 'Текст письма не найден'))
-            
-                # Ограничиваем длину для Telegram (ограничение 4096 символов)
-                if len(full_text) > 4000:
-                    full_text = full_text[:4000] + "...\n\n[текст сокращен]"
-            
-                # Экранируем HTML
-                full_text_escaped = html.escape(full_text)
-            
-                message = (
-                    f"📧 <b>Полный текст письма:</b>\n\n"
-                    f"<b>От:</b> {html.escape(email_data.get('from', 'Неизвестно'))}\n"
-                    f"<b>Тема:</b> {html.escape(email_data.get('subject', 'Без темы'))}\n"
-                    f"<b>Дата:</b> {html.escape(str(email_data.get('date', '')))}\n\n"
-                    f"<code>{full_text_escaped}</code>"
-                )
-            
-                # Кнопки для этого письма
-                reply_markup = self._get_email_buttons(email_data, {})
-            
-                await query.edit_message_text(
-                    text=message,
-                    parse_mode="HTML",
-                    reply_markup=reply_markup
-                )
-            else:
-                await query.edit_message_text(
-                    text="❌ Текст письма больше не доступен в кэше",
-                    parse_mode="HTML"
-                )
 
     def setup_handlers(self):
         """Настраивает обработчики команд"""
@@ -885,6 +900,14 @@ class EmailBot:
                 LOGIN: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.get_login)
                 ],
+                IMAP_SERVER: [
+                    MessageHandler(
+                        filters.TEXT & ~filters.COMMAND, self.get_imap_server
+                    )
+                ],
+                IMAP_PORT: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, self.get_imap_port)
+                ],
                 PASSWORD: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.get_password)
                 ],
@@ -894,10 +917,7 @@ class EmailBot:
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
         )
-        
-        # Добавляем обработчик инлайн-кнопок
-        self.application.add_handler(CallbackQueryHandler(self.button_callback))
-        
+
         # Добавляем обработчики
         self.application.add_handler(conv_handler)
 
@@ -914,7 +934,7 @@ class EmailBot:
             )
         )
 
-        # Команды (для совместимости со старыми командами)
+        # Команды
         self.application.add_handler(CommandHandler("check", self.check_email))
         self.application.add_handler(CommandHandler("events", self.show_events))
         self.application.add_handler(CommandHandler("status", self.show_statistics))
@@ -927,74 +947,19 @@ class EmailBot:
         # Автоматическая проверка почты каждые 10 секунд
         self.application.job_queue.run_repeating(
             self.auto_check_all_users,
-            interval=10,  # 10 секунд
-            first=5,  # Первый запуск через 5 секунд после старта
+            interval=10,
+            first=5,
         )
 
         # Проверка напоминаний о событиях каждые 1 час
         self.application.job_queue.run_repeating(
             self.send_event_reminders,
-            interval=3600,  # 1 час
-            first=10,  # Первый запуск через 10 секунд
+            interval=3600,
+            first=10,
         )
-
-    # В класс EmailBot добавим метод:
-
-
-    def _get_email_buttons(
-        self, email_data: Dict, user_data: Dict
-    ) -> Optional[InlineKeyboardMarkup]:
-        """Создает кнопки для письма"""
-        buttons = []
-
-        # Пробуем создать прямую ссылку на письмо
-        direct_link = None
-
-        # Вариант 1: Используем готовый шаблон из конфигурации
-        if Config.WEBMAIL_MESSAGE_URL and email_data.get("uid"):
-            direct_link = Config.WEBMAIL_MESSAGE_URL.replace(
-                "{uid}", str(email_data["uid"])
-            )
-
-        # Вариант 2: Генерируем ссылку в зависимости от типа веб-интерфейса
-        elif Config.WEBMAIL_TYPE == "roundcube" and email_data.get("uid"):
-            direct_link = f"{Config.WEBMAIL_BASE_URL}/?_task=mail&_action=show&_uid={email_data['uid']}&_mbox=INBOX"
-
-        elif Config.WEBMAIL_TYPE == "squirrelmail" and email_data.get("id"):
-            direct_link = f"{Config.WEBMAIL_BASE_URL}/src/read_body.php?mailbox=INBOX&passed_id={email_data['id']}"
-
-        elif Config.WEBMAIL_TYPE == "iredmail" and email_data.get("uid"):
-            direct_link = f"{Config.WEBMAIL_BASE_URL}/mail/?_task=mail&_action=show&_uid={email_data['uid']}&_mbox=INBOX"
-
-        # Если есть прямая ссылка, добавляем кнопку
-        if direct_link:
-            buttons.append([InlineKeyboardButton("📨 Открыть письмо", url=direct_link)])
-
-        # Всегда добавляем кнопку для открытия почтового ящика
-        if Config.WEBMAIL_BASE_URL:
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        "📬 Открыть почтовый ящик", url=Config.WEBMAIL_BASE_URL
-                    )
-                ]
-            )
-
-        # Добавляем кнопку для просмотра полного текста в Telegram
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    "📄 Показать полный текст", callback_data=f"fulltext_{email_data['id']}"
-                )
-            ]
-        )
-
-        if buttons:
-            return InlineKeyboardMarkup(buttons)
-        return None
 
     def run(self):
-        """Запускает бота""" 
+        """Запускает бота"""
         print("=" * 50)
         print("🤖 УМНЫЙ ПОЧТОВЫЙ АССИСТЕНТ")
         print("=" * 50)
@@ -1002,7 +967,6 @@ class EmailBot:
         print("📅 Календарь событий: автоматическое извлечение дат")
         print("🔔 Напоминания: за 7, 3 и 1 день до события")
         print("🤖 AI анализ: включен (Gemini)")
-        print("🔐 Безопасность: шифрование AES-256")
         print("=" * 50)
         print("🚀 Бот запускается...")
         self.application.run_polling()

@@ -1,9 +1,11 @@
 import imaplib
 import email
-import re
+import io
+import os
+import tempfile
 from email.header import decode_header
+from typing import List, Optional, Dict, Tuple
 import logging
-from typing import List, Optional, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +44,6 @@ class EmailClient:
             if not self.connect():
                 return []
 
-        # Ensure static analyzers and runtime checks have a non-None connection
         if self.connection is None:
             return []
 
@@ -74,33 +75,10 @@ class EmailClient:
         try:
             conn = self.connection
 
-            # Получаем UID письма
-            uid = None
-            try:
-                # Получаем UID через отдельный запрос
-                status_uid, uid_data = conn.fetch(email_id, "(UID)")
-                if status_uid == "OK" and uid_data and uid_data[0]:
-                    # Парсим ответ для получения UID
-                    # Ответ может быть в формате: b'1 (UID 1001)' или [b'1 (UID 1001)']
-                    uid_response = uid_data[0]
-                    if isinstance(uid_response, bytes):
-                        uid_response_str = uid_response.decode("utf-8", errors="ignore")
-                        # Ищем UID в ответе с помощью регулярного выражения
-                        uid_match = re.search(r"UID\s+(\d+)", uid_response_str)
-                        if uid_match:
-                            uid = int(uid_match.group(1))
-            except Exception as uid_error:
-                logger.warning(
-                    f"Не удалось получить UID для письма {email_id}: {uid_error}"
-                )
-                uid = None
-
-            # Получаем данные письма
             status, msg_data = conn.fetch(email_id, "(RFC822)")
             if status != "OK":
                 return None
 
-            # Ensure msg_data has the expected structure and extract bytes
             raw_msg = None
             if (
                 isinstance(msg_data, list)
@@ -128,24 +106,26 @@ class EmailClient:
             subject = self._decode_header(msg["Subject"])
             from_ = self._decode_header(msg["From"])
             date = msg["Date"]
+            to = self._decode_header(msg.get("To", ""))
+            cc = self._decode_header(msg.get("Cc", ""))
 
-            body = self._get_email_body(msg)
-
-            # Получаем Message-ID если есть
-            message_id = msg.get("Message-ID", "").strip("<>")
+            # Получаем тело письма и вложения
+            body, attachments = self._get_email_body_and_attachments(msg)
 
             return {
                 "id": (
                     email_id.decode() if isinstance(email_id, bytes) else str(email_id)
                 ),
-                "uid": uid,
-                "message_id": message_id,
                 "subject": subject,
                 "from": from_,
+                "to": to,
+                "cc": cc,
                 "date": date,
                 "body": body[:1000],
                 "preview": body[:200] + "..." if len(body) > 200 else body,
-                "full_body": body,  # Добавляем полное тело письма
+                "full_body": body,
+                "attachments": attachments,
+                "has_attachments": len(attachments) > 0,
             }
 
         except Exception as e:
@@ -171,25 +151,109 @@ class EmailClient:
         except:
             return str(header) if header else ""
 
-    def _get_email_body(self, msg) -> str:
+    def _get_email_body_and_attachments(self, msg) -> Tuple[str, List[Dict]]:
+        """Извлекает тело письма и вложения"""
+        body = ""
+        attachments = []
+
         try:
             if msg.is_multipart():
                 for part in msg.walk():
                     content_type = part.get_content_type()
                     content_disposition = str(part.get("Content-Disposition"))
 
+                    # Пропускаем multipart контейнеры
+                    if content_type.startswith("multipart/"):
+                        continue
+
+                    # Проверяем вложение
                     if (
-                        content_type == "text/plain"
-                        and "attachment" not in content_disposition
+                        "attachment" in content_disposition
+                        or "filename" in content_disposition
                     ):
+                        attachment = self._extract_attachment(part)
+                        if attachment:
+                            attachments.append(attachment)
+                        continue
+
+                    # Текстовое тело письма
+                    if content_type == "text/plain" and not body:
                         payload = part.get_payload(decode=True)
                         if payload:
-                            return payload.decode("utf-8", errors="ignore")
+                            body = payload.decode("utf-8", errors="ignore")
+
+                    # HTML тело (используем если текстового нет)
+                    elif content_type == "text/html" and not body:
+                        payload = part.get_payload(decode=True)
+                        if payload:
+                            # Простая очистка HTML для текста
+                            html_content = payload.decode("utf-8", errors="ignore")
+                            body = self._html_to_text(html_content)
             else:
+                # Простое письмо без вложений
                 payload = msg.get_payload(decode=True)
                 if payload:
-                    return payload.decode("utf-8", errors="ignore")
-        except Exception as e:
-            logger.error(f"Ошибка извлечения тела письма: {e}")
+                    body = payload.decode("utf-8", errors="ignore")
 
-        return ""
+        except Exception as e:
+            logger.error(f"Ошибка извлечения тела и вложений: {e}")
+
+        return body, attachments
+
+    def _extract_attachment(self, part) -> Optional[Dict]:
+        """Извлекает информацию о вложении"""
+        try:
+            filename = part.get_filename()
+            if filename:
+                # Декодируем имя файла
+                filename = self._decode_header(filename)
+
+                # Получаем данные файла
+                file_data = part.get_payload(decode=True)
+                if not file_data:
+                    return None
+
+                # Определяем тип файла
+                content_type = part.get_content_type()
+                file_size = len(file_data)
+
+                # Сохраняем во временный файл
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=f"_{filename}"
+                ) as tmp_file:
+                    tmp_file.write(file_data)
+                    temp_path = tmp_file.name
+
+                return {
+                    "filename": filename,
+                    "content_type": content_type,
+                    "size": file_size,
+                    "temp_path": temp_path,
+                    "data": (
+                        file_data if file_size < 1024 * 1024 else None
+                    ),  # Кэшируем только маленькие файлы
+                }
+        except Exception as e:
+            logger.error(f"Ошибка извлечения вложения: {e}")
+
+        return None
+
+    def _html_to_text(self, html: str) -> str:
+        """Простая конвертация HTML в текст"""
+        try:
+            import re
+
+            # Удаляем теги
+            text = re.sub(r"<[^>]+>", " ", html)
+            # Заменяем HTML entities
+            text = (
+                text.replace("&nbsp;", " ")
+                .replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+            )
+            # Удаляем лишние пробелы
+            text = re.sub(r"\s+", " ", text).strip()
+            return text
+        except:
+            return html

@@ -1,12 +1,14 @@
 {
   "792625701": {
     "login": "anvarjon.ganiyev@hyperthink.uz",
-    "password_encrypted": "Z0FBQUFBQnBKdDFrWEFqOWVENF9jcVYzU1ptekFsaFdBYmc0eGZRU0ZkN2VzZEdpRmU4UkIwbEEwbnZnUFh1MHlabGNaQV93eTJEMTE0STZyNWpYeTBObFlEaFljT1hGekE9PQ==",
-    "active": true
-  },
-  "677061670": {
-    "login": "ahrorjon.ganiyev@hyperthink.uz",
-    "password_encrypted": "Z0FBQUFBQnBKdURnMm5NN3JQRm9JUUp1bG9UTjM4aXktckt0dkJONmoxM3FJYzFzSjlMX3Y4SHZfWHR6aTJNZjVFaEd1X3loV19GSVdHaTNXVVNlSGJlZUtaelh1MldCeDB6Tkp5WnNEalhEMHVJSTU5VjRhTm89",
-    "active": true
+    "password": "Z0FBQUFBQnBNbkNZNEhlNk16Mmh3NkFiMkxFMjh2aU5Na0VIdlVVNHRlcVpOUThmOU9OZHhIeTVTY19JWEl1MnVlWDVEME9KMTJlNmlLbWN2aUF5ZlRRcTJlT3k5LUVNV0E9PQ==",
+    "imap_server": "email.hyperthink.uz",
+    "imap_port": 993,
+    "smtp_server": "smtp.email.hyperthink.uz",
+    "smtp_port": 587,
+    "webmail_url": "https://email.hyperthink.uz",
+    "provider": "Custom Server",
+    "provider_type": "custom",
+    "created_at": 1764154724.7779744
   }
 }
