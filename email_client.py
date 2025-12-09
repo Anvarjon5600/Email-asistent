@@ -122,7 +122,7 @@ class EmailClient:
                 "cc": cc,
                 "date": date,
                 "body": body[:1000],
-                "preview": body[:200] + "..." if len(body) > 200 else body,
+                "preview": body[:2000] + "..." if len(body) > 2000 else body,
                 "full_body": body,
                 "attachments": attachments,
                 "has_attachments": len(attachments) > 0,

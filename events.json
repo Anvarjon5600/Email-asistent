@@ -1,35 +1,22 @@
 {
   "792625701": [
     {
-      "id": "dc65740004",
-      "title": "Уже завтра! Вебинар Cisco: обновления Catalyst, Wi-Fi 7 и Industrial Wireless",
-      "date": "2025-12-02",
-      "original_date": "2025-12-02",
-      "created_at": "2025-12-01T11:30:49.233743",
+      "id": "872429b94b",
+      "title": "Приглашение на онлайн-семинар: Cisco Next-Gen Networking и Cisco 8000 Series Secure Routers – 16 Дек",
+      "date": "2025-12-16",
+      "original_date": "2025-12-16",
+      "created_at": "2025-12-05T16:32:52.595988",
       "reminder_sent": true,
-      "email_preview": "Копія (1) Cisco \r\n\r\nУважаемые коллеги! \r\n\r\n\r\n\r\n\r\nПриглашаем вас принять участие в онлайн-семинаре «Cisco Next-Gen Networking: современные решения коммутации и Wi-Fi» , который состоится 2 декабря 2025"
-    }
-  ],
-  "677061670": [
+      "email_preview": "вебинар Cisco \r\n\r\nУважаемые коллеги, \r\n\r\n\r\n\r\n\r\nПриглашаем вас принять участие в онлайн-семинаре «Cisco Next-Gen Networking: современные решения маршрутизации Cisco 8000 Series Secure Routers» , которы"
+    },
     {
-      "id": "8163716452",
-      "title": "Уже завтра! Вебинар Cisco: обновления Catalyst, Wi-Fi 7 и Industrial Wireless",
-      "date": "2025-12-02",
-      "original_date": "2025-12-02",
-      "created_at": "2025-12-01T11:30:52.920684",
-      "reminder_sent": true,
-      "email_preview": "Копія (1) Cisco \r\n\r\nУважаемые коллеги! \r\n\r\n\r\n\r\n\r\nПриглашаем вас принять участие в онлайн-семинаре «Cisco Next-Gen Networking: современные решения коммутации и Wi-Fi» , который состоится 2 декабря 2025"
-    }
-  ],
-  "792625701": [
-    {
-      "id": "a19b893add",
-      "title": "Срочьно",
-      "date": "2025-12-07",
-      "original_date": "2025-12-07",
-      "created_at": "2025-12-05T10:44:45.315302",
+      "id": "6c9a963259",
+      "title": "Старт партнёрской акции Cisco: обучение со скидкой до 40%",
+      "date": "2026-01-23",
+      "original_date": "2026-01-23",
+      "created_at": "2025-12-05T21:21:12.684619",
       "reminder_sent": false,
-      "email_preview": ", anvarjon.\r\n\r\n   Kilo      +9989997967210        07.12.2025  \r\n\r\n-- \r\n ,\r\n   Kilo \r\n\r\n"
+      "email_preview": "Cisco Promo \r\n\r\nУважаемые партнёры! \r\n\r\nХотим сообщить о старте новой партнёрской акции, в рамках которой вы можете не только реализовать проекты с Cisco, но и получить качественное обучение по автори"
     }
   ]
 }
