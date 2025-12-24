@@ -1,7 +1,19 @@
 {
   "792625701": {
     "login": "anvarjon.ganiyev@hyperthink.uz",
-    "password": "Z0FBQUFBQnBOOEQ4QlBIdUhOVGNleEhnMFppeWFtaFZLc0J3UW1EdDdhaDUxN2xXWmVaNHk1eDl4UU1CXzZXNGFkMFVXVzdNLTlCQ1g1SndwN1lNNWI0bGVuX3BleHd4cUE9PQ==",
+    "password": "Z0FBQUFBQnBOX3piVFR5YVdYNmY1eW8zWTk0M3Vsb1lsQmF4Ul9UMFpyOXBsa3VhZV9jOHNaeTh5c3NlblNtcHAyaHQ4VF93SWo1bmo2UnhIQXpvcHdMaFB2Vl9LRFhtaEE9PQ==",
+    "imap_server": "email.hyperthink.uz",
+    "imap_port": 993,
+    "smtp_server": "smtp.email.hyperthink.uz",
+    "smtp_port": 587,
+    "webmail_url": "https://email.hyperthink.uz",
+    "provider": "Custom Server",
+    "provider_type": "custom",
+    "created_at": 1764154724.7779744
+  },
+  "793528": {
+    "login": "info@hyperthink.uz",
+    "password": "Z0FBQUFBQnBOX191WnpTSTg1akRCR1VVUDQ1VjdqS2I2LUZGV3BpZjlhZHJwcTBTXzAxUkRJMnplSEpxaGFQNVozX3RwMnBYbEQ5OFZOMXBtOFdPdmtYQVA0X3ozWm5vRUU2M1Y5YWxNWlF3MjRrVVRSVm0wekk9",
     "imap_server": "email.hyperthink.uz",
     "imap_port": 993,
     "smtp_server": "smtp.email.hyperthink.uz",
