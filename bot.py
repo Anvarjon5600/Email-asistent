@@ -24,6 +24,9 @@ from email_client import EmailClient
 from gemini_client import gemini_client
 from event_manager import event_manager
 
+LOGIN, PASSWORD, IMAP_SERVER, IMAP_PORT, CONFIRMATION = range(5)
+CHANGE_INTERVAL, TOGGLE_NOTIFICATIONS = range(5, 7)
+
 # Настройка логирования
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -146,26 +149,267 @@ class EmailBot:
             one_time_keyboard=True,
         )
 
+    def get_interval_menu(self):
+        """Меню выбора интервала проверки"""
+        return ReplyKeyboardMarkup(
+            [
+                ["⏱️ 10 секунд", "⏱️ 30 секунд"],
+                ["⏱️ 1 минута", "⏱️ 5 минут"],
+                ["⏱️ 10 минут", "⏱️ 30 минут"],
+                ["⬅️ Назад в настройки"],
+            ],
+            resize_keyboard=True,
+            one_time_keyboard=True,
+        )
+
+    async def change_check_interval(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        """Меню изменения интервала автопроверки"""
+        user_id = update.message.from_user.id
+        user_data = user_manager.get_user_data(user_id)
+        if not user_data:
+            await update.message.reply_text(
+                "❌ Сначала настройте бота через /start",
+                reply_markup=self.get_main_menu(user_id),
+            )
+            return ConversationHandler.END
+
+        current_interval = user_data.get("check_interval", 10)
+
+        await update.message.reply_text(
+            f"⏰ <b>Интервал автопроверки почты</b>\n\n"
+            f"Текущий интервал: <b>{current_interval} секунд</b>\n\n"
+            f"Выберите новый интервал:",
+            parse_mode="HTML",
+            reply_markup=self.get_interval_menu(),
+        )
+        return CHANGE_INTERVAL
+
+    async def handle_interval_change(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        """Обрабатывает изменение интервала"""
+        user_id = update.message.from_user.id
+        text = update.message.text
+        if text == "⬅️ Назад в настройки":
+            await update.message.reply_text(
+                "⚙️ Настройки:", reply_markup=self.get_settings_menu()
+            )
+            return ConversationHandler.END
+        # Парсим выбранный интервал
+        interval_map = {
+            "⏱️ 10 секунд": 10,
+            "⏱️ 30 секунд": 30,
+            "⏱️ 1 минута": 60,
+            "⏱️ 5 минут": 300,
+            "⏱️ 10 минут": 600,
+            "⏱️ 30 минут": 1800,
+        }
+
+        if text in interval_map:
+            new_interval = interval_map[text]
+
+            # Сохраняем в базе пользователя
+            user_manager.update_user_setting(user_id, "check_interval", new_interval)
+            await update.message.reply_text(
+                f"✅ <b>Интервал автопроверки изменен!</b>\n\n"
+                f"Новый интервал: <b>{new_interval} секунд</b>\n\n"
+                f"⚠️ <i>Примечание: изменения применятся при следующей проверке</i>",
+                parse_mode="HTML",
+                reply_markup=self.get_main_menu(user_id),
+            )
+        else:
+            await update.message.reply_text(
+                "❌ Неверный выбор. Попробуйте снова:",
+                reply_markup=self.get_interval_menu(),
+            )
+            return CHANGE_INTERVAL
+
+        return ConversationHandler.END
+
+    async def toggle_notifications(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        """Переключает настройки уведомлений"""
+        user_id = update.message.from_user.id
+        user_data = user_manager.get_user_data(user_id)
+        if not user_data:
+            await update.message.reply_text(
+                "❌ Сначала настройте бота через /start",
+                reply_markup=self.get_main_menu(user_id),
+            )
+            return
+
+        notifications_enabled = user_data.get("notifications_enabled", True)
+        reminder_days = user_data.get("reminder_days", [7, 3, 1])
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    f"{'✅' if notifications_enabled else '❌'} Уведомления о письмах",
+                    callback_data="toggle_email_notifications",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{'✅' if 7 in reminder_days else '❌'} За 7 дней",
+                    callback_data="toggle_reminder_7",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{'✅' if 3 in reminder_days else '❌'} За 3 дня",
+                    callback_data="toggle_reminder_3",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{'✅' if 1 in reminder_days else '❌'} За 1 день",
+                    callback_data="toggle_reminder_1",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{'✅' if 0 in reminder_days else '❌'} В день события",
+                    callback_data="toggle_reminder_0",
+                )
+            ],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_settings")],
+        ]
+
+        await update.message.reply_text(
+            "🔔 <b>Настройки уведомлений</b>\n\n"
+            "Выберите, какие уведомления вы хотите получать:",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+
+    async def handle_notification_callback(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        """Обрабатывает нажатия на кнопки уведомлений"""
+        query = update.callback_query
+        await query.answer()
+
+        user_id = query.from_user.id
+        user_data = user_manager.get_user_data(user_id)
+
+        if not user_data:
+            await query.edit_message_text("❌ Ошибка: данные пользователя не найдены")
+            return
+
+        data = query.data
+
+        if data == "toggle_email_notifications":
+            current = user_data.get("notifications_enabled", True)
+            user_manager.update_user_setting(user_id, "notifications_enabled", not current)
+            status = "включены" if not current else "выключены"
+            await query.answer(f"✅ Уведомления о письмах {status}")
+
+        elif data.startswith("toggle_reminder_"):
+            day = int(data.split("_")[-1])
+            reminder_days = user_data.get("reminder_days", [7, 3, 1])
+
+            if day in reminder_days:
+                reminder_days.remove(day)
+                status = "выключено"
+            else:
+                reminder_days.append(day)
+                reminder_days.sort(reverse=True)
+                status = "включено"
+
+            user_manager.update_user_setting(user_id, "reminder_days", reminder_days)
+
+            day_text = {0: "В день события", 1: "За 1 день", 3: "За 3 дня", 7: "За 7 дней"}
+            await query.answer(f"✅ Напоминание '{day_text.get(day, str(day))}' {status}")
+
+        elif data == "back_to_settings":
+            await query.edit_message_text("⚙️ Настройки:", reply_markup=None)
+            await query.message.reply_text(
+                "Выберите раздел:", reply_markup=self.get_settings_menu()
+            )
+            return
+
+        # Обновляем клавиатуру
+        user_data = user_manager.get_user_data(user_id)
+        notifications_enabled = user_data.get("notifications_enabled", True)
+        reminder_days = user_data.get("reminder_days", [7, 3, 1])
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    f"{'✅' if notifications_enabled else '❌'} Уведомления о письмах",
+                    callback_data="toggle_email_notifications",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{'✅' if 7 in reminder_days else '❌'} За 7 дней",
+                    callback_data="toggle_reminder_7",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{'✅' if 3 in reminder_days else '❌'} За 3 дня",
+                    callback_data="toggle_reminder_3",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{'✅' if 1 in reminder_days else '❌'} За 1 день",
+                    callback_data="toggle_reminder_1",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{'✅' if 0 in reminder_days else '❌'} В день события",
+                    callback_data="toggle_reminder_0",
+                )
+            ],
+            [InlineKeyboardButton("⬅️ Назад", callback_data="back_to_settings")],
+        ]
+
+        await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(keyboard))
+
     # ==================== РЕГИСТРАЦИЯ ====================
 
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Начинает диалог с пользователя"""
         user = update.message.from_user
-        context.user_data["user_id"] = user.id
+        user_id = user.id
+        
+        # ВАЖНО: Очищаем контекст при новом старте
+        context.user_data.clear()
+        context.user_data["user_id"] = user_id
 
-        existing_data = user_manager.get_user_data(user.id)
+        existing_data = user_manager.get_user_data(user_id)
 
         if existing_data:
-            await update.message.reply_text(
-                f"👋 Добро пожаловать, {user.first_name}!\n\n"
-                f"✅ Ваш почтовый ящик: {existing_data['login']}\n"
-                f"🌐 Сервер: {existing_data['imap_server']}:{existing_data['imap_port']}\n\n"
-                f"Выберите действие:",
-                parse_mode="HTML",
-                reply_markup=self.get_main_menu(user.id),
+            # Пользователь уже зарегистрирован - предлагаем варианты
+            keyboard = ReplyKeyboardMarkup(
+                [
+                    ["✅ Продолжить с текущими данными"],
+                    ["🔄 Перенастроить заново"],
+                    ["❌ Отмена"],
+                ],
+                resize_keyboard=True,
+                one_time_keyboard=True,
             )
-            return ConversationHandler.END
+            
+            await update.message.reply_text(
+                f"👋 С возвращением, {user.first_name}!\n\n"
+                f"✅ У вас уже настроен почтовый ящик:\n"
+                f"📧 <b>Email:</b> {existing_data['login']}\n"
+                f"🌐 <b>Сервер:</b> {existing_data['imap_server']}:{existing_data['imap_port']}\n\n"
+                f"Что вы хотите сделать?",
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+            context.user_data["awaiting_start_choice"] = True
+            return LOGIN  # Возвращаем LOGIN чтобы обработать выбор
         else:
+            # Новый пользователь - начинаем регистрацию
             await update.message.reply_text(
                 f"👋 Привет, {user.first_name}!\n\n"
                 "🤖 Я - умный почтовый ассистент!\n\n"
@@ -183,6 +427,67 @@ class EmailBot:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> int:
         """Получает логин"""
+        user_id = context.user_data.get("user_id")
+        
+        # Проверяем, ждем ли мы выбор от уже зарегистрированного пользователя
+        if context.user_data.get("awaiting_start_choice"):
+            choice = update.message.text
+            
+            if choice == "✅ Продолжить с текущими данными":
+                # Возвращаемся в главное меню
+                del context.user_data["awaiting_start_choice"]
+                await update.message.reply_text(
+                    "✅ Отлично! Продолжаем работу.",
+                    reply_markup=self.get_main_menu(user_id),
+                )
+                return ConversationHandler.END
+            
+            elif choice == "🔄 Перенастроить заново":
+                # Удаляем старые данные
+                user_manager.delete_user(user_id)
+                
+                # Удаляем события пользователя
+                if user_id in event_manager.events:
+                    del event_manager.events[user_id]
+                    event_manager.save_events()
+                
+                # Очищаем флаг и начинаем заново
+                del context.user_data["awaiting_start_choice"]
+                
+                await update.message.reply_text(
+                    "🔄 <b>Начинаем настройку заново</b>\n\n"
+                    "Старые данные удалены.\n\n"
+                    "📝 Введите ваш email:",
+                    parse_mode="HTML",
+                    reply_markup=ReplyKeyboardRemove(),
+                )
+                return LOGIN
+            
+            elif choice == "❌ Отмена":
+                del context.user_data["awaiting_start_choice"]
+                await update.message.reply_text(
+                    "Отменено.", reply_markup=self.get_main_menu(user_id)
+                )
+                return ConversationHandler.END
+            
+            else:
+                # Неверный выбор - показываем меню снова
+                keyboard = ReplyKeyboardMarkup(
+                    [
+                        ["✅ Продолжить с текущими данными"],
+                        ["🔄 Перенастроить заново"],
+                        ["❌ Отмена"],
+                    ],
+                    resize_keyboard=True,
+                    one_time_keyboard=True,
+                )
+                await update.message.reply_text(
+                    "❓ Пожалуйста, выберите один из вариантов:",
+                    reply_markup=keyboard,
+                )
+                return LOGIN
+        
+        # Обычная обработка ввода email
         login = update.message.text.strip()
 
         if "@" not in login:
@@ -691,19 +996,21 @@ class EmailBot:
 
     # ==================== ОБРАБОТЧИКИ КНОПОК МЕНЮ ====================
 
-    async def handle_menu_button(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ):
+    async def handle_menu_button(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обрабатывает нажатия кнопок в меню"""
         user_id = update.message.from_user.id
         text = update.message.text
+
+        # Проверяем, ждем ли подтверждения удаления
+        if context.user_data.get("awaiting_delete_confirmation"):
+            await self.handle_delete_confirmation(update, context)
+            return
 
         if text == "📝 Начать настройку":
             await self.start(update, context)
 
         elif text == "📧 Проверить почту":
             await self.check_email(update, context)
-
         elif text == "🔄 Автопроверка":
             await update.message.reply_text(
                 "🔧 <b>Настройка автопроверки:</b>\n\n" "Выберите действие:",
@@ -735,11 +1042,43 @@ class EmailBot:
 
         elif text == "✏️ Изменить данные":
             await update.message.reply_text(
-                "Для изменения данных введите новый email:",
-                reply_markup=ReplyKeyboardRemove(),
+                "🔄 Для изменения данных нужно пройти настройку заново.\n"
+                "Используйте /start для перенастройки бота.",
+                reply_markup=self.get_main_menu(user_id),
             )
-            context.user_data["changing_data"] = True
-            return LOGIN
+
+        elif text == "⏰ Интервал проверки":
+            await update.message.reply_text(
+                "⏰ <b>Интервал автопроверки:</b>\n\n"
+                "Текущий интервал: 10 секунд\n\n"
+                "ℹ️ Для изменения интервала обратитесь к администратору или "
+                "измените настройки в коде бота.",
+                parse_mode="HTML",
+                reply_markup=self.get_settings_menu(),
+            )
+
+        elif text == "🔔 Напоминания":
+            await update.message.reply_text(
+                "🔔 <b>Настройки напоминаний:</b>\n\n"
+                "✅ Напоминания включены\n"
+                "📅 Напоминания приходят за 7, 3 и 1 день до события\n"
+                "⏰ Проверка событий: каждый час\n\n"
+                "Все события автоматически извлекаются из ваших писем!",
+                parse_mode="HTML",
+                reply_markup=self.get_settings_menu(),
+            )
+
+        elif text == "🔐 Безопасность":
+            await update.message.reply_text(
+                "🔐 <b>Информация о безопасности:</b>\n\n"
+                "✅ Ваши пароли зашифрованы\n"
+                "✅ Используется криптография Fernet\n"
+                "✅ Данные хранятся локально\n"
+                "✅ Соединение с почтой по SSL\n\n"
+                "⚠️ Для полного удаления данных используйте /delete",
+                parse_mode="HTML",
+                reply_markup=self.get_settings_menu(),
+            )
 
         elif text == "📊 Статистика":
             await self.show_statistics(update, context)
@@ -760,6 +1099,12 @@ class EmailBot:
                 "Главное меню:", reply_markup=self.get_main_menu(user_id)
             )
 
+        else:
+            # Если кнопка не распознана
+            await update.message.reply_text(
+                "❓ Команда не распознана. Выберите действие из меню:",
+                reply_markup=self.get_main_menu(user_id),
+            )
     # ==================== ФОНОВЫЕ ЗАДАЧИ ====================
 
     async def auto_check_all_users(self, context: ContextTypes.DEFAULT_TYPE):
@@ -769,18 +1114,31 @@ class EmailBot:
 
         for user_id in list(user_manager.users.keys()):
             try:
-                user_data = user_manager.get_user_data(user_id)
-                if user_data:
-                    await self._check_user_emails(
-                        user_id,
-                        lambda message, **kwargs: context.bot.send_message(
-                            chat_id=user_id, text=message, **kwargs
-                        ),
-                        notify_no_emails=False,
-                    )
+                user_data = user_manager.get_user_data(int(user_id))
+                if not user_data:
+                    continue
+
+                # Проверяем, включена ли автопроверка
+                autocheck_enabled = user_data.get("autocheck_enabled", True)
+                if not autocheck_enabled:
+                    continue
+
+                # Проверяем, включены ли уведомления
+                notifications_enabled = user_data.get("notifications_enabled", True)
+                if not notifications_enabled:
+                    continue
+
+                await self._check_user_emails(
+                    int(user_id),
+                    lambda message, **kwargs: context.bot.send_message(
+                        chat_id=int(user_id), text=message, **kwargs
+                    ),
+                    notify_no_emails=False,
+                )
             except Exception as e:
                 logger.error(f"Ошибка автопроверки для пользователя {user_id}: {e}")
                 continue
+
 
     async def send_event_reminders(self, context: ContextTypes.DEFAULT_TYPE):
         """Отправляет напоминания о событиях"""
@@ -788,6 +1146,17 @@ class EmailBot:
 
         for user_id, event, days_until in reminders:
             try:
+                # Проверяем настройки пользователя
+                user_data = user_manager.get_user_data(user_id)
+                if not user_data:
+                    continue
+
+                reminder_days = user_data.get("reminder_days", [7, 3, 1, 0])
+
+                # Проверяем, нужно ли отправлять напоминание для этого количества дней
+                if days_until not in reminder_days:
+                    continue
+
                 event_date_str = event.get("date", event.get("original_date", ""))
                 if not event_date_str:
                     continue
@@ -890,8 +1259,17 @@ class EmailBot:
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Отменяет диалог"""
         user_id = update.message.from_user.id
+        
+        # Очищаем все флаги
+        if "awaiting_start_choice" in context.user_data:
+            del context.user_data["awaiting_start_choice"]
+        if "awaiting_reregister_confirmation" in context.user_data:
+            del context.user_data["awaiting_reregister_confirmation"]
+        if "awaiting_delete_confirmation" in context.user_data:
+            del context.user_data["awaiting_delete_confirmation"]
+        
         await update.message.reply_text(
-            "Настройка отменена.", reply_markup=self.get_main_menu(user_id)
+            "❌ Настройка отменена.", reply_markup=self.get_main_menu(user_id)
         )
         return ConversationHandler.END
 
@@ -925,31 +1303,52 @@ class EmailBot:
                 ],
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
+            allow_reentry=True,
+            per_message=False,  # ВАЖНО: не создавать новый разговор для каждого сообщения
         )
 
-        # Добавляем обработчики
-        self.application.add_handler(conv_handler)
-
-        # Обработчик кнопок меню
-        self.application.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_menu_button)
+        # Обработчик изменения интервала
+        interval_handler = ConversationHandler(
+            entry_points=[
+                MessageHandler(
+                    filters.Regex("^⏰ Интервал проверки$"), self.change_check_interval
+                )
+            ],
+            states={
+                CHANGE_INTERVAL: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_interval_change)
+                ],
+            },
+            fallbacks=[
+                MessageHandler(
+                    filters.Regex("^⬅️ Назад в настройки$"), self.cancel
+                )
+            ],
         )
 
-        # Обработчик подтверждения удаления
-        self.application.add_handler(
-            MessageHandler(
-                filters.Regex("^(✅ Да, удалить все данные|❌ Нет, отмена)$"),
-                self.handle_delete_confirmation,
-            )
-        )
-
-        # Команды
+        # Команды (высокий приоритет)
+        self.application.add_handler(CommandHandler("start", self.start))
         self.application.add_handler(CommandHandler("check", self.check_email))
         self.application.add_handler(CommandHandler("events", self.show_events))
         self.application.add_handler(CommandHandler("status", self.show_statistics))
         self.application.add_handler(CommandHandler("help", self.show_help))
         self.application.add_handler(CommandHandler("about", self.show_about))
         self.application.add_handler(CommandHandler("delete", self.delete_data))
+        self.application.add_handler(CommandHandler("cancel", self.cancel))
+
+        # Conversation handlers
+        self.application.add_handler(conv_handler)
+        self.application.add_handler(interval_handler)
+
+        # Callback query handler для уведомлений
+        self.application.add_handler(
+            CallbackQueryHandler(self.handle_notification_callback)
+        )
+
+        # Обработчик кнопок меню (самый низкий приоритет)
+        self.application.add_handler(
+            MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_menu_button)
+        )
 
     def setup_jobs(self):
         """Настраивает фоновые задачи"""

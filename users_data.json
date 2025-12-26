@@ -1,26 +1,29 @@
 {
+  "677061670": {
+    "login": "ahrorjon.ganiyev@hyperthink.uz",
+    "password": "Z0FBQUFBQnBUTld3bEZVQXNEaWkxRWpqclg5UndNMnpzWUl1MEFYQngzOGxqbjNWZ1JnVk5LTnpiZm5GWEttbFRpSUVrdFU5TkY4YmloZzBNWDdsSmxzeFlUSFlJRzBwQmxLUkFmTWJXQnNBNnM3ak5HNDZRYm89",
+    "imap_server": "email.hyperthink.uz",
+    "imap_port": 993,
+    "smtp_server": "smtp.email.hyperthink.uz",
+    "smtp_port": 587,
+    "webmail_url": "",
+    "provider": "Custom Server",
+    "provider_type": "custom",
+    "created_at": "2025-12-25T11:12:00.519135",
+    "updated_at": "2025-12-25T11:13:40.318975",
+    "check_interval": 10
+  },
   "792625701": {
     "login": "anvarjon.ganiyev@hyperthink.uz",
-    "password": "Z0FBQUFBQnBOX3piVFR5YVdYNmY1eW8zWTk0M3Vsb1lsQmF4Ul9UMFpyOXBsa3VhZV9jOHNaeTh5c3NlblNtcHAyaHQ4VF93SWo1bmo2UnhIQXpvcHdMaFB2Vl9LRFhtaEE9PQ==",
+    "password": "Z0FBQUFBQnBUaG1HbTlkaGF3M1Z1RnRmQ0tUemtwbGxwb1A5bDNhdmtBeUo0Nk9NMkNPZzRmTllyVWRGN1BlUW1OT01VaXFGejFOaU9Cd0RuS2NKQ215YTludV9ZR2hQcnc9PQ==",
     "imap_server": "email.hyperthink.uz",
     "imap_port": 993,
     "smtp_server": "smtp.email.hyperthink.uz",
     "smtp_port": 587,
-    "webmail_url": "https://email.hyperthink.uz",
+    "webmail_url": "",
     "provider": "Custom Server",
     "provider_type": "custom",
-    "created_at": 1764154724.7779744
-  },
-  "793528": {
-    "login": "info@hyperthink.uz",
-    "password": "Z0FBQUFBQnBOX191WnpTSTg1akRCR1VVUDQ1VjdqS2I2LUZGV3BpZjlhZHJwcTBTXzAxUkRJMnplSEpxaGFQNVozX3RwMnBYbEQ5OFZOMXBtOFdPdmtYQVA0X3ozWm5vRUU2M1Y5YWxNWlF3MjRrVVRSVm0wekk9",
-    "imap_server": "email.hyperthink.uz",
-    "imap_port": 993,
-    "smtp_server": "smtp.email.hyperthink.uz",
-    "smtp_port": 587,
-    "webmail_url": "https://email.hyperthink.uz",
-    "provider": "Custom Server",
-    "provider_type": "custom",
-    "created_at": 1764154724.7779744
+    "created_at": "2025-12-26T10:13:42.655361",
+    "updated_at": "2025-12-26T10:13:42.655433"
   }
 }
